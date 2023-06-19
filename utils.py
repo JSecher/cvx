@@ -13,7 +13,9 @@ def create_output_dir(child_dir=None):
         child_dir = os.path.join(RESULT_DIR, child_dir)
         if not os.path.exists(child_dir):
             os.makedirs(child_dir)
-    THIS_RESULT_DIR = child_dir
+        THIS_RESULT_DIR = child_dir
+    else:
+        THIS_RESULT_DIR = RESULT_DIR
     return child_dir
 
 def get_file_path(file_name):
