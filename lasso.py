@@ -183,7 +183,6 @@ def admm_lasso(A, b, lam=1.0, rho=1.0, max_iter=1000, tol=1e-4, verbose=False, r
         # Update x
         #x = cho_solve((L, lower), Atb + rho * (z - u))
         x = np.linalg.solve(U, np.linalg.solve(L, Atb + rho * (z - u)))
-        #x = __lasso_chol_solve(L, U, Atb, z, u, rho)
 
         # Update z with relaxation
         # z = soft_threshold(x + u, lam / rho)
