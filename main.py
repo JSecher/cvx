@@ -5,8 +5,8 @@ from lasso import lasso, admm_lasso, lasso_lib, generate_lasso_data, tol_check, 
 # Generate data
 def sample_problem_0():
     """ Sample problem 1 - Small data set"""
-    n = 5
-    p = 10
+    n = 10
+    p = 5
     sigma = 1
     # Set seed
     np.random.seed(0)
@@ -17,37 +17,38 @@ def sample_problem_0():
     tol = 1e-6
     return A, x0, b, lam, rho, max_iter, tol
 
+
 def sample_problem_1():
     """ Sample problem 1 - Small data set"""
-    n = 100
-    p = 200
+    n = 200
+    p = 100
     sigma = 1
     # Set seed
     np.random.seed(0)
     A, x0, b = generate_lasso_data(n, p, sigma)
-    lam = 10
+    lam = 0.0001
     rho = 1
     max_iter = 1000
-    tol = 1e-9
+    tol = 1e-4
     return A, x0, b, lam, rho, max_iter, tol
 
 
 def sample_problem_2():
     """ Sample problem 2 - Large data set"""
-    n = 1000
-    p = 2000
+    n = 2000
+    p = 1000
     sigma = 1
     np.random.seed(0)
-    X, y, beta = generate_lasso_data(n, p, sigma)
-    lam = 0.1 * np.linalg.norm(np.dot(A.T, b), ord=np.inf)
+    A, x0, b = generate_lasso_data(n, p, sigma)
+    lam = 0.001 # 0.1 * np.linalg.norm(np.dot(A.T, b), ord=np.inf)
     rho = 1
     max_iter = 1000
     tol = 1e-6
-    return X, y, beta, lam, rho, max_iter, tol
+    return A, x0, b, lam, rho, max_iter, tol
 
 
 if __name__ == "__main__":
-    data = sample_problem_1()
+    data = sample_problem_2()
     A, x0, b, lam, rho, max_iter, tol = data
 
     print("Testing lasso")
@@ -63,5 +64,8 @@ if __name__ == "__main__":
     print("lasso error: {}".format(compute_error(x_new, x_lib)))
     print("lasso iterations: {}".format(stats_new["iter"]))
     print("lasso time: {}".format(stats_new["time"]))
+    print("lasso_new objective: {}".format(stats_new["objective"][-1]))
     print("lasso_lib iterations: {}".format(stats_lib["iter"]))
     print("lasso_lib time: {}".format(stats_lib["time"]))
+    print("lasso_lib objective: {}".format(stats_lib["objective"][-1]))
+    print("Done!")
