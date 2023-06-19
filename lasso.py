@@ -1,17 +1,19 @@
 import numpy as np
 from sklearn.linear_model import Lasso
-from scipy.linalg import cho_factor, cho_solve
+from scipy.linalg import cho_factor, cho_solve, cholesky
 import time
+import warnings
 
 
 # Generate lasso data
 def generate_lasso_data(n, p, sigma):
     # Generate A
-    A = np.eye(n, p)  # np.random.normal(0, 1, (n, p))
+    A = np.random.normal(0, 1, (n, p))
     # Generate beta
     x0 = np.random.normal(0, 1, p) + 10
     # Generate y
-    b = np.dot(A, x0) # + np.random.normal(0, sigma, n)
+    b = np.dot(A, x0) + np.random.normal(0, sigma, n)
+
     return A, x0, b
 
 
@@ -39,14 +41,18 @@ def soft_threshold(A, kappa):
     return np.sign(A) * np.maximum(np.abs(A) - kappa, 0)
 
 
+def shrinkage(x, kappa):
+    return np.maximum(0, x - kappa) - np.maximum(0, -x - kappa)
+
+
 # Check convergence
 def tol_check(A, y, tol):
     return np.linalg.norm(A - y) / np.linalg.norm(A) < tol
 
 
 # Objective function
-def objective(A, y, beta, lam):
-    return 0.5 * np.linalg.norm(y - np.dot(A, beta)) ** 2 + lam * np.linalg.norm(beta, 1)
+def objective(A, x, b, lam):
+    return 0.5 * np.linalg.norm(b - np.dot(A, x)) ** 2 + lam * np.linalg.norm(x, 1)
 
 
 # Input check for lasso
@@ -81,6 +87,9 @@ def lasso_input_check(A, y, lam, rho, max_iter, tol):
         raise TypeError("tol must be a float")
     if tol < 0:
         raise ValueError("tol must be non-negative")
+    # Raise warning if number of features is larger than number of samples
+    if A.shape[1] > A.shape[0]:
+        warnings.warn("Number of features is larger than number of samples")
 
 
 # ADMM for lasso problem
@@ -133,7 +142,10 @@ def lasso(A, y, lam, rho, max_iter, tol):
 
     return z, stats
 
-def admm_lasso(A, b, lam=1.0, rho=1.0, max_iter=1000, tol=1e-4):
+
+def admm_lasso(A, b, lam=1.0, rho=1.0, max_iter=1000, tol=1e-4, verbose=False, return_history=False):
+    ABSTOL = tol
+    RELTOL = tol
 
     # Check input
     lasso_input_check(A, b, lam, rho, max_iter, tol)
@@ -145,45 +157,103 @@ def admm_lasso(A, b, lam=1.0, rho=1.0, max_iter=1000, tol=1e-4):
     x = np.zeros((n_features,))
     z = np.zeros((n_features,))
     u = np.zeros((n_features,))
+    if return_history:
+        objs = np.zeros((max_iter,))
+        r_norms = np.zeros((max_iter,))
+        s_norms = np.zeros((max_iter,))
+        eps_pris = np.zeros((max_iter,))
+        eps_duals = np.zeros((max_iter,))
 
+    # Start timer
+    t1 = time.time()
     # Precompute matrices
     Atb = np.dot(A.T, b)
+    # Precompute constants
+    n_features_sqrt_abstol = np.sqrt(n_features) * ABSTOL
+    lam_rho = lam / rho
 
     # Cholesky factorization of XTX + rho * I
-    L, lower = cho_factor(np.dot(A.T, A) + rho * np.eye(n_features), lower=True)
+    # L, lower = cho_factor(np.dot(A.T, A) + rho * np.eye(n_features), lower=True)
+    L = cholesky(np.dot(A.T, A) + rho * np.eye(n_features), lower=True)
+    U = L.T
 
-    t1 = time.time()
     for i in range(max_iter):
         # Update x
-        x = cho_solve((L, lower), Atb + rho * (z - u))
+        #x = cho_solve((L, lower), Atb + rho * (z - u))
+        x = np.linalg.solve(U, np.linalg.solve(L, Atb + rho * (z - u)))
 
         # Update z with relaxation
-        z = soft_threshold(x + u, lam / rho)
-
+        # z = soft_threshold(x + u, lam / rho)
+        z_old = z
+        z = shrinkage(x + u, lam_rho)
         # Update u
         u += x - z
 
         # Check convergence
-        r = np.linalg.norm(x - z, 2)
-        r_norm = r / np.linalg.norm(x, 1)
+        r_norm = np.linalg.norm(x - z, 2)
+        s_norm = np.linalg.norm(-rho * (z - z_old), 2)
+
+        eps_pri = n_features_sqrt_abstol + RELTOL * max(np.linalg.norm(x, 2), np.linalg.norm(-z, 2))
+        eps_dual = n_features_sqrt_abstol + RELTOL * np.linalg.norm(rho * u, 2)
+
+        pri_converged = r_norm < eps_pri
+        dual_converged = s_norm < eps_dual
+
+#        r = np.linalg.norm(x - z, 2)
+ #       r_norm = r / np.linalg.norm(x, 2)
+  #      pri_converged = r < ABSTOL
+   #     dual_converged = r_norm < RELTOL
+
+        # Collect objective values
+        if return_history:
+            objs[i] = objective(A, x, b, lam)
+            r_norms[i] = r_norm
+            s_norms[i] = s_norm
+            eps_pris[i] = eps_pri
+            eps_duals[i] = eps_dual
+
+        if verbose:
+            print('iter: {}, r_norm: {:.3e}, s_norm: {:.3e}, eps_pri: {:.3e}, eps_dual: {:.3e}, pri_converged: {}, dual_converged: {}'.format(
+                i, r_norm, s_norm, eps_pri, eps_dual, pri_converged, dual_converged))
 
         # Check convergence
-        if r < abs_tol and r_norm < tol:
+        if pri_converged and dual_converged:
             break
+
     te = time.time() - t1
 
     if i == max_iter - 1:
         print('ADMM Lasso did not converge in {} iterations'.format(max_iter))
 
-    stats = {'x': x, 'z': z, 'u': u, 'iter': i+1, 'time': te}
+    if not return_history:
+        objs = np.array([objective(A, x, b, lam)])
+        r_norms = np.array([r_norm])
+        s_norms = np.array([s_norm])
+        eps_pris = np.array([eps_pri])
+        eps_duals = np.array([eps_dual])
+    else:
+        objs = objs[:i + 1]
+        r_norms = r_norms[:i + 1]
+        s_norms = s_norms[:i + 1]
+        eps_pris = eps_pris[:i + 1]
+        eps_duals = eps_duals[:i + 1]
+
+    stats = {'x': x, 'z': z, 'u': u, 'iter': i + 1, 'time': te,
+             'objective': objs,
+             'r_norm': r_norms,
+             's_norm': s_norms,
+             'eps_pri': eps_pris,
+             'eps_dual': eps_duals
+             }
 
     return x, stats
 
+
 # Reference lasso solution from library
 def lasso_lib(A, y, lam=1.0, rho=1.0, max_iter=1000, tol=1e-4):
-    clf = Lasso(alpha=lam, fit_intercept=False, max_iter=max_iter, tol=tol)
+    clf = Lasso(alpha=lam, fit_intercept=False, max_iter=max_iter, tol=tol, copy_X=True)
     t1 = time.time()
     clf.fit(A, y)
     te = time.time() - t1
-    stats = {'x': clf.coef_, 'z': clf.coef_, 'u': np.zeros(len(clf.coef_)), 'iter': clf.n_iter_, 'time': te}
+    stats = {'x': clf.coef_, 'z': clf.coef_, 'u': np.zeros(len(clf.coef_)), 'iter': clf.n_iter_, 'time': te, 'objective': np.array([objective(A, clf.coef_, y, lam)])}
     return clf.coef_, stats
