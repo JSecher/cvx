@@ -1,9 +1,10 @@
+from mpi4py import MPI
 import numpy as np
 from sklearn.linear_model import Lasso
 from scipy.linalg import cho_factor, cho_solve, cholesky
 import time
 import warnings
-# from mpi4py import MPI
+
 
 # Generate lasso data
 def generate_lasso_data(n, p, sigma):
@@ -250,115 +251,135 @@ def admm_lasso(A, b, lam=1.0, rho=1.0, max_iter=1000, tol=1e-4, verbose=False, r
 
     return x, stats
 
-# def admm_lasso_mpi(A, b, lam=1.0, rho=1.0, max_iter=1000, tol=1e-4, verbose=False, return_history=False):
-#     comm = MPI.COMM_WORLD
-#     rank = comm.Get_rank()
-#     size = comm.Get_size()
-#
-#     ABSTOL = tol
-#     RELTOL = tol
-#
-#     # Check input
-#     lasso_input_check(A, b, lam, rho, max_iter, tol)
-#     abs_tol = 1.0
-#
-#     n_samples, n_features = A.shape
-#
-#     # Initialize variables
-#     x = np.zeros((n_features,))
-#     z = np.zeros((n_features,))
-#     u = np.zeros((n_features,))
-#     if return_history:
-#         objs = np.zeros((max_iter,))
-#         r_norms = np.zeros((max_iter,))
-#         s_norms = np.zeros((max_iter,))
-#         eps_pris = np.zeros((max_iter,))
-#         eps_duals = np.zeros((max_iter,))
-#
-#     # Start timer
-#     t1 = time.time()
-#     # Precompute matrices
-#     Atb = np.dot(A.T, b)
-#     # Precompute constants
-#     n_features_sqrt_abstol = np.sqrt(n_features) * ABSTOL
-#     lam_rho = lam / rho
-#
-#     # Cholesky factorization of XTX + rho * I
-#     # L, lower = cho_factor(np.dot(A.T, A) + rho * np.eye(n_features), lower=True)
-#     L = cholesky(np.dot(A.T, A) + rho * np.eye(n_features), lower=True)
-#     U = L.T
-#
-#     for i in range(max_iter):
-#         # Update x
-#         #x = cho_solve((L, lower), Atb + rho * (z - u))
-#         x = np.linalg.solve(U, np.linalg.solve(L, Atb + rho * (z - u)))
-#
-#         MPI.re
-#         # Update z with relaxation
-#         # z = soft_threshold(x + u, lam / rho)
-#         z_old = z
-#         z = shrinkage(x + u, lam_rho)
-#         # Update u
-#         u += x - z
-#
-#         # Check convergence
-#         r_norm = np.linalg.norm(x - z, 2)
-#         s_norm = np.linalg.norm(-rho * (z - z_old), 2)
-#
-#         eps_pri = n_features_sqrt_abstol + RELTOL * max(np.linalg.norm(x, 2), np.linalg.norm(-z, 2))
-#         eps_dual = n_features_sqrt_abstol + RELTOL * np.linalg.norm(rho * u, 2)
-#
-#         pri_converged = r_norm < eps_pri
-#         dual_converged = s_norm < eps_dual
-#
-# #        r = np.linalg.norm(x - z, 2)
-#  #       r_norm = r / np.linalg.norm(x, 2)
-#   #      pri_converged = r < ABSTOL
-#    #     dual_converged = r_norm < RELTOL
-#
-#         # Collect objective values
-#         if return_history:
-#             objs[i] = objective(A, x, b, lam)
-#             r_norms[i] = r_norm
-#             s_norms[i] = s_norm
-#             eps_pris[i] = eps_pri
-#             eps_duals[i] = eps_dual
-#
-#         if verbose:
-#             print('iter: {}, r_norm: {:.3e}, s_norm: {:.3e}, eps_pri: {:.3e}, eps_dual: {:.3e}, pri_converged: {}, dual_converged: {}'.format(
-#                 i, r_norm, s_norm, eps_pri, eps_dual, pri_converged, dual_converged))
-#
-#         # Check convergence
-#         if pri_converged and dual_converged:
-#             break
-#
-#     te = time.time() - t1
-#
-#     if i == max_iter - 1:
-#         print('ADMM Lasso did not converge in {} iterations'.format(max_iter))
-#
-#     if not return_history:
-#         objs = np.array([objective(A, x, b, lam)])
-#         r_norms = np.array([r_norm])
-#         s_norms = np.array([s_norm])
-#         eps_pris = np.array([eps_pri])
-#         eps_duals = np.array([eps_dual])
-#     else:
-#         objs = objs[:i + 1]
-#         r_norms = r_norms[:i + 1]
-#         s_norms = s_norms[:i + 1]
-#         eps_pris = eps_pris[:i + 1]
-#         eps_duals = eps_duals[:i + 1]
-#
-#     stats = {'x': x, 'z': z, 'u': u, 'iter': i + 1, 'time': te,
-#              'objective': objs,
-#              'r_norm': r_norms,
-#              's_norm': s_norms,
-#              'eps_pri': eps_pris,
-#              'eps_dual': eps_duals
-#              }
-#
-#     return x, stats
+
+def admm_lasso_mpi(A, b, lam=1.0, rho=1.0, max_iter=1000, tol=1e-4, verbose=False, return_history=False, comm=MPI.COMM_WORLD, debug=False):
+    
+    # Get info about MPI
+    rank = comm.Get_rank()
+    size = comm.Get_size()
+    
+    ABSTOL = tol
+    RELTOL = tol
+
+    # Check input
+    lasso_input_check(A, b, lam, rho, max_iter, tol)
+    abs_tol = 1.0
+
+    n_samples, n_features = A.shape
+
+    # Initialize variables
+    x = np.zeros((n_features,))
+    z = np.zeros((n_features,))
+    u = np.zeros((n_features,))
+    
+    # Initialize variables for consus across ranks
+    xhat = np.zeros((n_features,))
+    uhat = np.zeros((n_features,))
+
+    if return_history:
+        objs = np.zeros((max_iter,))
+        r_norms = np.zeros((max_iter,))
+        s_norms = np.zeros((max_iter,))
+        eps_pris = np.zeros((max_iter,))
+        eps_duals = np.zeros((max_iter,))
+
+
+    # Start timer
+    t1 = time.time()
+    # Precompute matrices
+    Atb = np.dot(A.T, b)
+    # Precompute constants
+    n_features_sqrt_abstol = np.sqrt(n_features) * ABSTOL
+    lam_rho = lam / (rho*size)
+
+    # Cholesky factorization of XTX + rho * I
+    # L, lower = cho_factor(np.dot(A.T, A) + rho * np.eye(n_features), lower=True)
+    L = cholesky(np.dot(A.T, A) + rho * np.eye(n_features), lower=True)
+    U = L.T
+
+    for i in range(max_iter):
+        # Update x
+        #x = cho_solve((L, lower), Atb + rho * (z - u))
+        x = np.linalg.solve(U, np.linalg.solve(L, Atb + rho * (z - u)))
+
+        # Make all reduction of x across ranks, to get xhat as the average
+        comm.Allreduce(x, xhat, op=MPI.SUM)
+        xhat = xhat / size
+
+        # Update z with relaxation
+        # z = soft_threshold(x + u, lam / rho)
+        z_old = z
+        z = shrinkage(xhat + uhat, lam_rho)
+        # Update u
+        u += x - z
+
+        # Make all reduction of u across ranks, to get uhat as the average
+        comm.Allreduce(u, uhat, op=MPI.SUM)
+        uhat = uhat / size
+
+        # Check convergence
+        r_norm = np.linalg.norm(xhat - z, 2)
+        s_norm = np.linalg.norm(-rho * (z - z_old), 2)
+
+        eps_pri = n_features_sqrt_abstol + RELTOL * max(np.linalg.norm(xhat, 2), np.linalg.norm(-z, 2))
+        eps_dual = n_features_sqrt_abstol + RELTOL * np.linalg.norm(rho * u, 2)
+
+        pri_converged = r_norm < eps_pri
+        dual_converged = s_norm < eps_dual
+
+        # Communicate convergence across ranks
+        pri_converged = comm.allreduce(pri_converged, op=MPI.LAND)
+        dual_converged = comm.allreduce(dual_converged, op=MPI.LAND)
+
+#        r = np.linalg.norm(x - z, 2)
+ #       r_norm = r / np.linalg.norm(x, 2)
+  #      pri_converged = r < ABSTOL
+   #     dual_converged = r_norm < RELTOL
+
+        # Collect objective values
+        if return_history:
+            objs[i] = objective(A, x, b, lam)
+            r_norms[i] = r_norm
+            s_norms[i] = s_norm
+            eps_pris[i] = eps_pri
+            eps_duals[i] = eps_dual
+
+        if verbose:
+            print('rank: {}, iter: {}, r_norm: {:.3e}, s_norm: {:.3e}, eps_pri: {:.3e}, eps_dual: {:.3e}, pri_converged: {}, dual_converged: {}'.format(
+                rank, i, r_norm, s_norm, eps_pri, eps_dual, pri_converged, dual_converged))
+
+        # Check convergence
+        if pri_converged and dual_converged:
+            break
+
+    te = time.time() - t1
+
+    if i == max_iter - 1:
+        print('ADMM Lasso did not converge in {} iterations'.format(max_iter))
+
+    if not return_history:
+        objs = np.array([objective(A, x, b, lam)])
+        r_norms = np.array([r_norm])
+        s_norms = np.array([s_norm])
+        eps_pris = np.array([eps_pri])
+        eps_duals = np.array([eps_dual])
+    else:
+        objs = objs[:i + 1]
+        r_norms = r_norms[:i + 1]
+        s_norms = s_norms[:i + 1]
+        eps_pris = eps_pris[:i + 1]
+        eps_duals = eps_duals[:i + 1]
+
+    stats = {'x': x, 'z': z, 'u': u, 'iter': i + 1, 'time': te,
+             'objective': objs,
+             'r_norm': r_norms,
+             's_norm': s_norms,
+             'eps_pri': eps_pris,
+             'eps_dual': eps_duals
+             }
+
+    return x, stats
+
 
 
 # Reference lasso solution from library
