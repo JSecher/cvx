@@ -90,6 +90,11 @@ def plot_stats(data, stats, name=None, save=False):
     else:
         plt.show()
 
+    idx = stats["s_norm"] == 0.0
+    if np.any(idx):
+        # Add machine precision to idx in s_norm
+        stats["s_norm"][idx] = np.finfo(float).eps
+
     # Plot r_norm and s_norm, as a function of iterations
     plt.figure()
     plt.plot(stats["r_norm"], label="r_norm")
@@ -233,6 +238,15 @@ if __name__ == "__main__":
 
     x_new, stats_new = admm_lasso(A, b, lam, rho, max_iter, tol, verbose=False, return_history=True)
     plot_stats(data, stats_new, name=f"lambda{lam}", save=True)
+    # Optimal lambda
+    data = (A, x0, b, 0.038, rho, max_iter, tol)
+    x_new, stats_new = admm_lasso(A, b, 0.038, rho, max_iter, tol, verbose=False, return_history=True)
+    plot_stats(data, stats_new, name=f"lambda{0.038}_optimal", save=True)
+    # Overeg lambda
+    data = (A, x0, b, 10.0, rho, max_iter, tol)
+    x_new, stats_new = admm_lasso(A, b, 10.0, rho, max_iter, tol, verbose=False, return_history=True)
+    plot_stats(data, stats_new, name=f"lambda{10}", save=True)
+
     # Run reestimation test - see reestimation of x as a function of lambda
     run_reestimation_test(admm_lasso, sample_problem_3, name="lasso", save=True)
 
