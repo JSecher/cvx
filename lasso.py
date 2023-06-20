@@ -54,7 +54,11 @@ def tol_check(A, y, tol):
 
 
 # Objective function
-def objective(A, x, b, lam):
+def objective(A, x, b, lam, z):
+    return 0.5 * np.linalg.norm(b - np.dot(A, x)) ** 2 + lam * np.linalg.norm(z, 1)
+
+# Objective function
+def objectiveLib(A, x, b, lam):
     return 0.5 * np.linalg.norm(b - np.dot(A, x)) ** 2 + lam * np.linalg.norm(x, 1)
 
 
@@ -130,7 +134,7 @@ def lasso(A, y, lam, rho, max_iter, tol):
         beta_all[:, i] = beta
         z_all[:, i] = z
         u_all[:, i] = u
-        obj_all[i] = objective(A, y, beta, lam)
+        obj_all[i] = objective(A, y, beta, lam, z)
 
         # Check convergence
         if tol_check(z, zold, tol):
@@ -209,7 +213,7 @@ def admm_lasso(A, b, lam=1.0, rho=1.0, max_iter=1000, tol=1e-4, verbose=False, r
 
         # Collect objective values
         if return_history:
-            objs[i] = objective(A, x, b, lam)
+            objs[i] = objective(A, x, b, lam, z)
             r_norms[i] = r_norm
             s_norms[i] = s_norm
             eps_pris[i] = eps_pri
@@ -229,7 +233,7 @@ def admm_lasso(A, b, lam=1.0, rho=1.0, max_iter=1000, tol=1e-4, verbose=False, r
         print('ADMM Lasso did not converge in {} iterations'.format(max_iter))
 
     if not return_history:
-        objs = np.array([objective(A, x, b, lam)])
+        objs = np.array([objective(A, x, b, lam, z)])
         r_norms = np.array([r_norm])
         s_norms = np.array([s_norm])
         eps_pris = np.array([eps_pri])
@@ -338,7 +342,7 @@ def admm_lasso_mpi(A, b, lam=1.0, rho=1.0, max_iter=1000, tol=1e-4, verbose=Fals
 
         # Collect objective values
         if return_history:
-            objs[i] = objective(A, x, b, lam)
+            objs[i] = objective(A, x, b, lam, z)
             r_norms[i] = r_norm
             s_norms[i] = s_norm
             eps_pris[i] = eps_pri
@@ -358,7 +362,7 @@ def admm_lasso_mpi(A, b, lam=1.0, rho=1.0, max_iter=1000, tol=1e-4, verbose=Fals
         print('rank {} : ADMM Lasso did not converge in {} iterations'.format(rank, max_iter))
 
     if not return_history:
-        objs = np.array([objective(A, x, b, lam)])
+        objs = np.array([objective(A, x, b, lam, z)])
         r_norms = np.array([r_norm])
         s_norms = np.array([s_norm])
         eps_pris = np.array([eps_pri])
@@ -388,5 +392,5 @@ def lasso_lib(A, y, lam=1.0, rho=1.0, max_iter=1000, tol=1e-4):
     t1 = time.time()
     clf.fit(A, y)
     te = time.time() - t1
-    stats = {'x': clf.coef_, 'z': clf.coef_, 'u': np.zeros(len(clf.coef_)), 'iter': clf.n_iter_, 'time': te, 'objective': np.array([objective(A, clf.coef_, y, lam)])}
+    stats = {'x': clf.coef_, 'z': clf.coef_, 'u': np.zeros(len(clf.coef_)), 'iter': clf.n_iter_, 'time': te, 'objective': np.array([objectiveLib(A, clf.coef_, y, lam)])}
     return clf.coef_, stats
