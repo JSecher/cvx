@@ -4,6 +4,8 @@
 results/
 results/**/*
 results/*
+out/*
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
