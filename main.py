@@ -60,6 +60,10 @@ def sample_problem_3():
     tol = 1e-12
     return A, x0, b, lam, rho, max_iter, tol
 
+def sample_problem_3_overreg():
+    A, x0, b, _, rho, max_iter, tol = sample_problem_3()
+    lam = 5
+    return A, x0, b, lam, rho, max_iter, tol
 
 def plot_stats(data, stats, name=None, save=False):
     """ Plot stats """
@@ -147,6 +151,76 @@ def run_reestimation_test(function, problem, name=None, save=False):
     print("Best lambda for l_1: {}".format(lams[np.argmin(norms_l1)]))
     print("Best lambda for l_2: {}".format(lams[np.argmin(norms_l2)]))
 
+def run_growing_problem(m_min, m_max, num, n, lam, function, save=False):
+
+    ms = np.linspace(m_min, m_max, num).astype(int)
+    sigma = 0.1
+    rho = 1
+    max_iter = 1000
+    tol = 1e-12
+
+    all_stats = []
+    residuals = []
+    print("Running growing problem - running for {} m values".format(len(ms)))
+    for m in ms:
+        np.random.seed(0)
+        A, x0, b = generate_lasso_data(m, n, sigma)
+        x, stats = function(A, b, lam, rho, max_iter, tol)
+        all_stats.append(stats)
+        residuals.append(np.linalg.norm(x - x0))
+
+    # Plot results
+    plt.figure()
+    plt.plot(ms, [stats["objective"][-1] for stats in all_stats])
+    plt.xlabel("m")
+    plt.ylabel("Objective value")
+    plt.suptitle("Objective value vs. m for {}".format(function.__name__))
+    plt.title("$\lambda = {}, \\rho = {}$".format(lam, rho))
+    if save:
+        save_path = get_file_path("{}_objective.png".format(function.__name__))
+        plt.savefig("{}.pdf".format(save_path), bbox_inches='tight')
+    else:
+        plt.show()
+
+    # Plot time vs. m
+    plt.figure()
+    plt.plot(ms, [stats["time"] for stats in all_stats])
+    plt.xlabel("m")
+    plt.ylabel("Time (s)")
+    plt.suptitle("Time vs. m for {}".format(function.__name__))
+    plt.title("$\lambda = {}, \\rho = {}$".format(lam, rho))
+    if save:
+        save_path = get_file_path("{}_time.png".format(function.__name__))
+        plt.savefig("{}.pdf".format(save_path), bbox_inches='tight')
+    else:
+        plt.show()
+
+    # Plot number of iterations vs. m
+    plt.figure()
+    plt.plot(ms, [stats["iter"] for stats in all_stats])
+    plt.xlabel("m")
+    plt.ylabel("Number of iterations")
+    plt.suptitle("Number of iterations vs. m for {}".format(function.__name__))
+    plt.title("$\lambda = {}, \\rho = {}$".format(lam, rho))
+    if save:
+        save_path = get_file_path("{}_iter.png".format(function.__name__))
+        plt.savefig("{}.pdf".format(save_path), bbox_inches='tight')
+    else:
+        plt.show()
+
+    # Plot residuals vs. m
+    plt.figure()
+    plt.plot(ms, residuals)
+    plt.xlabel("m")
+    plt.ylabel("$\|x_0 - x\|_2$")
+    plt.suptitle("Residual vs. m for {}".format(function.__name__))
+    plt.title("$\lambda = {}, \\rho = {}$".format(lam, rho))
+    if save:
+        save_path = get_file_path("{}_residual.png".format(function.__name__))
+        plt.savefig("{}.pdf".format(save_path), bbox_inches='tight')
+    else:
+        plt.show()
+
 
 if __name__ == "__main__":
     data = sample_problem_3()
@@ -177,3 +251,19 @@ if __name__ == "__main__":
     print("lasso_lib time: {}".format(stats_lib["time"]))
     print("lasso_lib objective: {}".format(stats_lib["objective"][-1]))
     print("Done!")
+
+
+
+    # Run reestimation test - see reestimation of x as a function of lambda
+    run_reestimation_test(admm_lasso, sample_problem_3, save=True)
+    # Run growing problem test - see how problem size affects convergence
+    run_growing_problem(1000, 100000, 10, 50, 0.038, admm_lasso, save=False)
+
+    # Run lasso for a over regularized problem
+    data = sample_problem_3_overreg()
+    A, x0, b, lam, rho, max_iter, tol = data
+    print("Running overegulazied with n = {}, p = {}, lam = {}, rho = {}".format(A.shape[0], A.shape[1], lam, rho))
+    print("Running overegulazied with max_iter = {}, tol = {}".format(max_iter, tol))
+    x_over, stats_over = admm_lasso(A, b, lam, rho, max_iter, tol, verbose=False, return_history=True)
+    plot_stats(data, stats_over, name="lasso_problem3_overreg", save=False)
+
