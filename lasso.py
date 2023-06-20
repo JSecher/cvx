@@ -1,4 +1,11 @@
-from mpi4py import MPI
+try:
+    from mpi4py import MPI
+    MPI_AVAILABLE = True
+    COMM_WORLD = MPI.COMM_WORLD()
+except:
+    print("mpi4py not found")
+    MPI_AVAILABLE = False
+    COMM_WORLD = None
 import numpy as np
 from sklearn.linear_model import Lasso
 from scipy.linalg import cho_factor, cho_solve, cholesky
@@ -256,12 +263,13 @@ def admm_lasso(A, b, lam=1.0, rho=1.0, max_iter=1000, tol=1e-4, verbose=False, r
     return x, stats
 
 
-def admm_lasso_mpi(A, b, lam=1.0, rho=1.0, max_iter=1000, tol=1e-4, verbose=False, return_history=False, comm=MPI.COMM_WORLD, debug=False):
-    
+def admm_lasso_mpi(A, b, lam=1.0, rho=1.0, max_iter=1000, tol=1e-4, verbose=False, return_history=False, comm=COMM_WORLD, debug=False):
+    if not MPI_AVAILABLE:
+        raise Exception('MPI is not available')
     # Get info about MPI
     rank = comm.Get_rank()
     size = comm.Get_size()
-    
+
     ABSTOL = tol
     RELTOL = tol
 
@@ -275,7 +283,7 @@ def admm_lasso_mpi(A, b, lam=1.0, rho=1.0, max_iter=1000, tol=1e-4, verbose=Fals
     x = np.zeros((n_features,))
     z = np.zeros((n_features,))
     u = np.zeros((n_features,))
-    
+
     # Initialize variables for consus across ranks
     xhat = np.zeros((n_features,))
     uhat = np.zeros((n_features,))
