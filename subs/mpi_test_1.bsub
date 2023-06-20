@@ -1,0 +1,31 @@
+#!/bin/bash
+#BSUB -q hpcintro
+#BSUB -n 20
+#BSUB -R "span[block=20]"
+#BSUB -W 1:00
+#BSUB -R "rusage[mem=4GB]"
+#BSUB -J cvx
+#BSUB -o "out/test_1_%J.out"
+#BSUB -e "out/test_1_%J.err"
+
+# Load modules
+module purge
+#module load mpi/4.1.4-gcc-12.2.0-binutils-2.39
+module load python3/3.10.11
+module load mpi/4.1.5-gcc-11.3.0-binutils-2.38
+module load mpi4py/3.1.4-python-3.10.11-openmpi-4.1.5
+source ~/cvx/venv_cvx/bin/activate
+
+# Do not worry why this is here...
+unset LSB_AFFINITY_HOSTFILE
+
+problem=0
+NP="1 2 4 8 10 12 16 20"
+
+mapping="--map-by socket --rank-by core" # # Map 40 core even, but close in rank if possible
+
+for np in $NP ; do
+    mpirun -np $np $mapping --mca rmaps_dist_device ib0 --report-bindings \
+        python3 ~/cvx/main_mpi.py --problem $problem --output mpi_problem_${problem}
+done  # NP loop
+
