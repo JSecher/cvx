@@ -53,12 +53,12 @@ def sample_problem_3():
     sigma = 0.1
     np.random.seed(0)
     A, x0, b = generate_lasso_data(n, p, sigma)
-    lam = 1e-5
+    # lam = 1e-5
+    lam = 10
     rho = 1
     max_iter = 1000
     tol = 1e-12
     return A, x0, b, lam, rho, max_iter, tol
-
 
 
 def plot_stats(data, stats, name=None, save=False):
@@ -73,14 +73,15 @@ def plot_stats(data, stats, name=None, save=False):
         name = "lasso"
     # Plot objective value, as a function of iterations
     plt.figure()
+    plt.ticklabel_format(style='plain')
     plt.plot(stats["objective"])
     plt.xlabel("Iteration")
     plt.ylabel("Objective value")
     plt.yscale("log")
-    plt.suptitle("Objective value vs. iteration for {}".format(name))
-    plt.title("$\lambda = {}, \\rho = {}$".format(data[3], data[4]))
+    plt.suptitle("Objective value vs. iteration")
+    plt.title(f"$\lambda = {data[3]}, \\rho = {data[4]}$")
     if save:
-        save_path = get_file_path("{}_objective.png".format(name))
+        save_path = get_file_path("{}_objective".format(name))
         plt.savefig("{}.pdf".format(save_path), bbox_inches='tight')
     else:
         plt.show()
@@ -95,16 +96,17 @@ def plot_stats(data, stats, name=None, save=False):
     plt.xlabel("Iteration")
     plt.ylabel("Norm")
     plt.yscale("log")
-    plt.suptitle("Norms vs. iteration for {}".format(name))
+    plt.suptitle("Norms vs. iteration")
     plt.title("$\lambda = {}, \\rho = {}$".format(data[3], data[4]))
     plt.legend()
     if save:
-        save_path = get_file_path("{}_norms.png".format(name))
+        save_path = get_file_path("{}_norms".format(name))
         plt.savefig("{}.pdf".format(save_path), bbox_inches='tight')
     else:
         plt.show()
 
-def run_reestimation_test(function, problem, save=False):
+
+def run_reestimation_test(function, problem, name=None, save=False):
     """ Run reestimation test - to see if the solution is the same for different lambda values """
 
     data = problem()
@@ -118,7 +120,7 @@ def run_reestimation_test(function, problem, save=False):
     norms_l2 = np.empty(len(lams))
     print("Running reestimation test - running for {} lambda values".format(len(lams)))
     for i, lam in enumerate(lams):
-        x, _ = function(A, b, lam, rho, max_iter, tol)
+        x, stats = function(A, b, lam, rho, max_iter, tol)
         xs[:, i] = x
         norms_linf[i] = np.linalg.norm(x - x0, ord=np.inf)
         norms_l1[i] = np.linalg.norm(x - x0, ord=1)
@@ -126,18 +128,16 @@ def run_reestimation_test(function, problem, save=False):
 
     # Plot results
     plt.figure()
-    #plt.plot(lams, norms_linf, label="$\ell_\infty$")
-    #plt.plot(lams, norms_l1, label="$\ell_1$")
-    plt.plot(lams, norms_l2)
+    plt.plot(lams, norms_l1, label="$\ell_1$")
+    plt.axvline(x=lams[np.argmin(norms_l1)], color='r', linestyle="--", label=f'Optimal $\lambda$: {lams[np.argmin(norms_l1)]:2f}')
     plt.xlabel("$\lambda$")
-    plt.ylabel("$\|x_0 - x\|_2$")
+    plt.ylabel("$\|x_0 - x\|_1$")
     plt.xscale("log")
-    # plt.yscale("log")
-    # plt.legend()
+    plt.legend()
     plt.suptitle("Reestimation test - {}".format(function.__name__))
     plt.title("Problem size: m = {}, n = {}".format(A.shape[0], A.shape[1]))
     if save:
-        save_path = get_file_path(f"reestimation_test_{function.__name__}.png")
+        save_path = get_file_path(f"reestimation_{function.__name__}_{name}")
         plt.savefig("{}.pdf".format(save_path), bbox_inches='tight')
     else:
         plt.show()
@@ -157,15 +157,15 @@ if __name__ == "__main__":
     print("Running with n = {}, p = {}, lam = {}, rho = {}".format(A.shape[0], A.shape[1], lam, rho))
     print("Running with max_iter = {}, tol = {}".format(max_iter, tol))
 
-    x_new, stats_new = admm_lasso(A, b, lam, rho, max_iter, tol, verbose=False, return_history=False)
-    plot_stats(data, stats_new, name="lasso_problem3", save=False)
+    x_new, stats_new = admm_lasso(A, b, lam, rho, max_iter, tol, verbose=False, return_history=True)
+    plot_stats(data, stats_new, name=f"lambda{lam}", save=True)
     # Run reestimation test - see reestimation of x as a function of lambda
-    run_reestimation_test(admm_lasso, sample_problem_3, save=True)
+    run_reestimation_test(admm_lasso, sample_problem_3, name="lasso", save=True)
 
     # x, stats = lasso(A, b, lam, rho, max_iter, tol)
     x_lib, stats_lib = lasso_lib(A, b, lam, rho, max_iter, tol)
     # Run reestimation test - see reestimation of x as a function of lambda
-    run_reestimation_test(lasso_lib, sample_problem_3, save=False)
+    # run_reestimation_test(lasso_lib, sample_problem_3, save=False)
 
     # Check convergence
     print("Checking convergence")
