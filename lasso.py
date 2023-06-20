@@ -285,7 +285,7 @@ def admm_lasso_mpi(A, b, lam=1.0, rho=1.0, max_iter=1000, tol=1e-4, verbose=Fals
 
 
     # Start timer
-    t1 = time.time()
+    t1 = MPI.Wtime()
     # Precompute matrices
     Atb = np.dot(A.T, b)
     # Precompute constants
@@ -352,10 +352,10 @@ def admm_lasso_mpi(A, b, lam=1.0, rho=1.0, max_iter=1000, tol=1e-4, verbose=Fals
         if pri_converged and dual_converged:
             break
 
-    te = time.time() - t1
+    te = MPI.Wtime() - t1
 
     if i == max_iter - 1:
-        print('ADMM Lasso did not converge in {} iterations'.format(max_iter))
+        print('rank {} : ADMM Lasso did not converge in {} iterations'.format(rank, max_iter))
 
     if not return_history:
         objs = np.array([objective(A, x, b, lam)])
@@ -378,7 +378,7 @@ def admm_lasso_mpi(A, b, lam=1.0, rho=1.0, max_iter=1000, tol=1e-4, verbose=Fals
              'eps_dual': eps_duals
              }
 
-    return x, stats
+    return xhat, stats
 
 
 
